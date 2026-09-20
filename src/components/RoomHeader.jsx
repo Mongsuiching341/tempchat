@@ -13,7 +13,7 @@ export default function RoomHeader({ room, onExpire, memberCount, isOwner, onLea
   }
 
   return (
-    <div className="flex items-center justify-between border-b border-slate-400 bg-white px-4 py-3">
+    <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3">
       <div>
         <p className="text-sm text-slate-500">Room</p>
         <p className="font-mono text-lg font-semibold tracking-widest text-slate-900">{room.room_code}</p>
