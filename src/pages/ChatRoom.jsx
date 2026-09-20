@@ -219,7 +219,7 @@ async function handleEndRoom() {
   return (
     <div className="mx-auto flex min-h-screen max-w-3xl flex-col">
       <RoomHeader room={room} onExpire={handleExpire} memberCount={members.length} isOwner={isOwner} onLeave={handleLeaveRoom} onEnd={handleEndRoom} />
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1  sm:overflow-hidden">
         <div className="flex flex-1 flex-col">
           <MessageList items={items} currentUserId={userId} />
           <MessageInput room={room} userId={userId} displayName={displayName} />
