@@ -27,10 +27,8 @@ export default function RoomHeader({ room, onExpire, memberCount, isOwner, onLea
         >
           {copied ? 'Copied!' : 'Copy link'}
         </button>
-      </div>
-      <div className="flex items-center gap-3">
-        {/* existing CountdownTimer + Copy link button stay here */}
-        {isOwner ? (
+
+  {isOwner ? (
           <button
             onClick={onEnd}
             className="rounded-lg border border-red-300 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
@@ -45,7 +43,9 @@ export default function RoomHeader({ room, onExpire, memberCount, isOwner, onLea
             Leave room
           </button>
         )}
+
       </div>
+      
     </div>
   )
 }
