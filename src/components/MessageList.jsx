@@ -9,7 +9,7 @@ export default function MessageList({ items, currentUserId }) {
   }, [items.length])
 
   return (
-    <div className="flex-1 space-y-3 overflow-y-auto px-6 md:px-4 py-4">
+    <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4 ">
       {items.length === 0 && (
         <p className="mt-10 text-center text-sm text-slate-400">
           No messages yet. Say hello!
