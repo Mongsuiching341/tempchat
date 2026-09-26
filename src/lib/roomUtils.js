@@ -34,7 +34,7 @@ export const EXPIRY_OPTIONS = [
   { label: '1 hour', minutes: 60 },
   { label: '6 hours', minutes: 60 * 6 },
   { label: '24 hours', minutes: 60 * 24 },
-  { label: '3 days', minutes: 60 * 24 * 3 },
+  
 ]
 
 export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024 // 10MB
