@@ -27,7 +27,7 @@ export default function MessageInput({ room, userId, displayName }) {
       if (sendError) throw sendError
       setText('')
     } catch (err) {
-      console.error(err)
+      console.error(err) 
       setError('Message failed to send.')
     } finally {
       setSending(false)

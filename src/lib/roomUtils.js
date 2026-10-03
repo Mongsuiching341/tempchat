@@ -30,6 +30,7 @@ export function formatCountdown(expiresAtISO) {
 }
 
 export const EXPIRY_OPTIONS = [
+   { label: '3 minutes', minutes: 3 },
   { label: '15 minutes', minutes: 15 },
   { label: '1 hour', minutes: 60 },
   { label: '6 hours', minutes: 60 * 6 },

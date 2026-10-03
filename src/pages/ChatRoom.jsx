@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
-import { ensureAnonymousSession, getStoredDisplayName } from '../lib/session.js'
+import { ensureAnonymousSession, getStoredDisplayName,storeDisplayName } from '../lib/session.js'
 import { isExpired } from '../lib/roomUtils.js'
 import RoomHeader from '../components/RoomHeader.jsx'
 import MessageList from '../components/MessageList.jsx'
 import MessageInput from '../components/MessageInput.jsx'
 import RoomExpired from '../components/RoomExpired.jsx'
 import UserList from '../components/UserList.jsx'
+import Toast from '../components/Toast.jsx'
 
 export default function ChatRoom() {
   const { roomCode } = useParams()
@@ -22,6 +23,7 @@ const [ending, setEnding] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [expired, setExpired] = useState(false)
+  const [toast, setToast] = useState('')
 const isOwner = !!(room && userId && room.created_by === userId)
 
   const channelRef = useRef(null)
@@ -103,6 +105,7 @@ const isOwner = !!(room && userId && room.created_by === userId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomCode])
 
+
   function subscribeRealtime(roomId) {
     const channel = supabase
       .channel(`room-${roomId}`)
@@ -111,18 +114,153 @@ const isOwner = !!(room && userId && room.created_by === userId)
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `room_id=eq.${roomId}` },
         (payload) =>{console.log('REALTIME MESSAGE RECEIVED:', payload)
           setItems((prev) => mergeItems([payload.new], [], prev))
+          
         } 
+      ).on(
+  'postgres_changes',
+  {
+    event: 'UPDATE',
+    schema: 'public',
+    table: 'messages',
+  },
+  (payload) => {
+    console.log('MESSAGE UPDATED:', payload)
+
+    if (
+      String(payload.new.room_id) !== String(roomId)
+    ) {
+      return
+    }
+
+    setItems((prev) =>
+      prev.map((item) =>
+        item.kind === 'message' &&
+        item.id === payload.new.id
+          ? {
+              ...item,
+              ...payload.new,
+              message_text: payload.new.message_text,
+            }
+          : item
       )
+    )
+  }
+).on(
+  'postgres_changes',
+  {
+    event: 'DELETE',
+    schema: 'public',
+    table: 'messages',
+  },
+  (payload) => {
+    console.log('MESSAGE DELETED:', payload)
+
+    setItems((prev) =>
+      prev.filter(
+        (item) =>
+          !(
+            item.kind === 'message' &&
+            item.id === payload.old.id
+          )
+      )
+    )
+  }
+)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'files', filter: `room_id=eq.${roomId}` },
         (payload) => setItems((prev) => mergeItems([], [payload.new], prev))
       )
       .on(
+  'postgres_changes',
+  {
+    event: 'DELETE',
+    schema: 'public',
+    table: 'files',
+  },
+  (payload) => {
+    console.log('FILE DELETED:', payload)
+
+    setItems((prev) =>
+      prev.filter(
+        (item) =>
+          !(
+            item.kind === 'file' &&
+            item.id === payload.old.id
+          )
+      )
+    )
+  }
+)
+      .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'room_members', filter: `room_id=eq.${roomId}` },
-        (payload) => setMembers((prev) => [...prev, payload.new])
+        (payload) =>{
+setMembers((prev) => [...prev, payload.new])
+ setToast(`${payload.new.display_name} joined the room`)
+        } 
+        
+      ).on(
+  'postgres_changes',
+  {
+    event: 'UPDATE',
+    schema: 'public',
+    table: 'room_members',
+  },
+  (payload) => {
+    console.log('MEMBER UPDATED:', payload)
+
+    if (
+      String(payload.new.room_id) !== String(roomId)
+    ) {
+      return
+    }
+
+    setMembers((prev) =>
+      prev.map((member) =>
+        member.id === payload.new.id
+          ? {
+              ...member,
+              ...payload.new,
+            }
+          : member
       )
+    )
+
+   
+  }
+)
+      .on(
+  'postgres_changes',
+  {
+    event: 'DELETE',
+    schema: 'public',
+    table: 'room_members',
+  
+  },
+  (payload) => {
+    console.log('MEMBER LEFT:', payload)
+
+    setMembers((prev) => {
+      const leavingMember = prev.find(
+        (member) => member.id === payload.old.id
+      )
+
+      // Show leave toast
+      if (leavingMember) {
+        setToast(
+          `${leavingMember.display_name || 'Someone'} left the room`
+        )
+      }
+
+      // Remove member from UserList
+      return prev.filter(
+        (member) => member.id !== payload.old.id
+      )
+    })
+  }
+)
+
     .subscribe((status) => {
   console.log('Realtime status:', status)
 })
@@ -178,6 +316,98 @@ async function handleEndRoom() {
   }
 }
 
+async function handleEditMessage(messageId, newText) {
+  const { error } = await supabase
+    .from('messages')
+    .update({
+      message_text: newText,
+    })
+    .eq('id', messageId)
+    .eq('sender_id', userId)
+
+  if (error) {
+    console.error('Edit message error:', error)
+    setToast('Failed to edit message')
+    return false
+  }
+
+  setToast('Message edited successfully')
+
+  return true
+}
+
+async function handleDeleteMessage(messageId) {
+  const { error } = await supabase
+    .from('messages')
+    .delete()
+    .eq('id', messageId)
+    .eq('sender_id', userId)
+
+  if (error) {
+    console.error('Delete message error:', error)
+    setToast('Failed to delete message')
+    return
+  }
+
+  setToast('Message deleted')
+}
+
+async function handleDeleteFile(file) {
+  if (!file || !userId) return false
+
+  // Delete from Storage
+  const { error: storageError } = await supabase
+    .storage
+    .from('room-files')
+    .remove([file.storage_path])
+
+  if (storageError) {
+    console.error('Storage delete error:', storageError)
+    setToast('Failed to delete file')
+    return false
+  }
+
+  // Delete database record
+  const { error: dbError } = await supabase
+    .from('files')
+    .delete()
+    .eq('id', file.id)
+    .eq('uploader_id', userId)
+
+  if (dbError) {
+    console.error('Database delete error:', dbError)
+    setToast('Failed to delete file record')
+    return false
+  }
+
+  setToast('File deleted')
+  return true
+}
+
+async function handleNameChange(newName) {
+  if (!room || !userId) return false
+
+  const { error } = await supabase
+    .from('room_members')
+    .update({
+      display_name: newName,
+    })
+    .eq('room_id', room.id)
+    .eq('user_id', userId)
+
+  if (error) {
+    console.error('Name update error:', error)
+    setToast('Failed to update name')
+    return false
+  }
+
+  storeDisplayName(roomCode, newName)
+
+  setToast('Name updated successfully')
+
+  return true
+}
+
 
   function handleExpire() {
     setExpired(true)
@@ -218,14 +448,29 @@ async function handleEndRoom() {
 
   return (
     <div className="mx-auto flex min-h-screen max-w-full sm:max-w-3xl flex-col">
-      <RoomHeader room={room} onExpire={handleExpire} memberCount={members.length} isOwner={isOwner} onLeave={handleLeaveRoom} onEnd={handleEndRoom} />
+     <RoomHeader room={room} onExpire={handleExpire} memberCount={members.length} isOwner={isOwner} onLeave={handleLeaveRoom} onEnd={handleEndRoom} />
+       <Toast
+  message={toast}
+  onClose={() => setToast('')}
+/>
       <div className="flex flex-1  sm:overflow-hidden">
         <div className="flex flex-1 flex-col">
-          <MessageList items={items} currentUserId={userId} />
+       <MessageList
+  items={items}
+  currentUserId={userId}
+  onEditMessage={handleEditMessage}
+  onDeleteMessage={handleDeleteMessage}
+  onDeleteFile={handleDeleteFile}
+/>
           <MessageInput room={room} userId={userId} displayName={displayName} />
         </div>
-         <UserList members={members} />
+        <UserList
+  members={members}
+  userId={userId}
+  onNameChange={handleNameChange}
+/>
       </div>
+
     </div>
   )
 }
